@@ -1,0 +1,309 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: Amazon Elasticsearch Service with Amazon Cognito
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: amazon-elasticsearch-cognito-auth
+    Description: 'Amazon Elasticsearch Service with Amazon Cognito
+
+      '
+    Author: Kazuki Matsuda
+    SpdxLicenseId: Apache-2.0
+    LicenseUrl: s3://aws-sam-cli-managed-default-samclisourcebucket-1mnves2xb5r4o/amazon-elasticsearch-cognito-auth/86d3f3a95c324c9479bd8986968f4327
+    ReadmeUrl: s3://aws-sam-cli-managed-default-samclisourcebucket-1mnves2xb5r4o/amazon-elasticsearch-cognito-auth/e7ae1897241249a137b5fb0fd50bbb5a
+    Labels:
+    - elasticsearch
+    - cognito
+    HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
+    SemanticVersion: 0.0.6
+    SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+    - Label:
+        default: Elasticsearch Configuration
+      Parameters:
+      - ElasticsearchVersion
+      - ElasticsearchAvailabilityZoneCount
+      - ElasticsearchInstanceType
+      - ElasticsearchInstanceCount
+      - ElasticsearchMasterType
+      - ElasticsearchMasterCount
+    - Label:
+        default: Cognito Configuration
+      Parameters:
+      - CognitoUserPoolDomain
+      - CognitoAllowedEmailDomains
+Globals:
+  Function:
+    Timeout: 5
+Parameters:
+  ElasticsearchVersion:
+    Type: String
+    Default: 7.1
+    AllowedValues:
+    - 7.1
+    - 6.8
+  ElasticsearchAvailabilityZoneCount:
+    Type: Number
+    Default: 2
+    AllowedValues:
+    - 1
+    - 2
+    - 3
+  ElasticsearchInstanceType:
+    Type: String
+    Default: i3.large.elasticsearch
+    AllowedValues:
+    - i3.large.elasticsearch
+    - i3.xlarge.elasticsearch
+    - i3.2xlarge.elasticsearch
+    - i3.4xlarge.elasticsearch
+    - i3.8xlarge.elasticsearch
+    - i3.16xlarge.elasticsearch
+  ElasticsearchInstanceCount:
+    Type: Number
+    Default: 2
+  ElasticsearchMasterType:
+    Type: String
+    Default: t2.medium.elasticsearch
+    AllowedValues:
+    - t2.small.elasticsearch
+    - t2.medium.elasticsearch
+    - m5.large.elasticsearch
+    - m5.xlarge.elasticsearch
+    - m5.2xlarge.elasticsearch
+    - m5.4xlarge.elasticsearch
+    - m5.12xlarge.elasticsearch
+    - r5.large.elasticsearch
+    - r5.xlarge.elasticsearch
+    - r5.2xlarge.elasticsearch
+    - r5.4xlarge.elasticsearch
+    - r5.12xlarge.elasticsearch
+  ElasticsearchMasterCount:
+    Type: Number
+    Default: 3
+  CognitoUserPoolDomain:
+    Description: Domain prefix for the sign-in page hosted by Amazon Cognito
+    Type: String
+    AllowedPattern: ^[a-z0-9\-]*$
+    MaxLength: 63
+    MinLength: 1
+  CognitoAllowedEmailDomains:
+    Type: CommaDelimitedList
+    Description: Specific domains allowed to register on Cognito
+    Default: amazon.com,amazon.co.jp
+Transform: AWS::Serverless-2016-10-31
+Resources:
+  Elasticsearch:
+    Type: AWS::Elasticsearch::Domain
+    DependsOn: UserPoolDomain
+    DeletionPolicy: Retain
+    Properties:
+      ElasticsearchVersion:
+        Ref: ElasticsearchVersion
+      ElasticsearchClusterConfig:
+        ZoneAwarenessEnabled: true
+        ZoneAwarenessConfig:
+          AvailabilityZoneCount:
+            Ref: ElasticsearchAvailabilityZoneCount
+        InstanceType:
+          Ref: ElasticsearchInstanceType
+        InstanceCount:
+          Ref: ElasticsearchInstanceCount
+        DedicatedMasterEnabled: true
+        DedicatedMasterType:
+          Ref: ElasticsearchMasterType
+        DedicatedMasterCount:
+          Ref: ElasticsearchMasterCount
+      CognitoOptions:
+        Enabled: true
+        UserPoolId:
+          Ref: KibanaUserPool
+        IdentityPoolId:
+          Ref: KibanaIdentityPool
+        RoleArn:
+          Fn::GetAtt:
+          - CognitoAccessForAmazonES
+          - Arn
+      AdvancedOptions:
+        rest.action.multi.allow_explicit_index: true
+      AccessPolicies:
+        Fn::Sub: "{\n  \"Version\": \"2012-10-17\",\n  \"Statement\": [\n    {\n \
+          \     \"Effect\": \"Allow\",\n      \"Principal\": {\n        \"AWS\": [\n\
+          \          \"${AWS::AccountId}\"\n        ]\n      },\n      \"Action\"\
+          : [\n        \"es:*\"\n      ],\n      \"Resource\": \"arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*/*\"\
+          \n    }\n  ]\n}\n"
+  CognitoAccessForAmazonES:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: Amazon Elasticsearch role for Kibana authentication.
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service: es.amazonaws.com
+          Action: sts:AssumeRole
+      ManagedPolicyArns:
+      - arn:aws:iam::aws:policy/AmazonESCognitoAccess
+      Path: /service-role/
+  PreSignUp:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: Validate e-mail domain just before sign-up
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1mnves2xb5r4o/amazon-elasticsearch-cognito-auth/9eabedfdbbc0524cde6b9c0005e70dd6
+      Handler: index.lambda_handler
+      Runtime: python3.6
+      Environment:
+        Variables:
+          ALLOWED_DOMAINS:
+            Fn::Join:
+            - ','
+            - Ref: CognitoAllowedEmailDomains
+  PreSignUpInvocationPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName:
+        Fn::GetAtt:
+        - PreSignUp
+        - Arn
+      Principal: cognito-idp.amazonaws.com
+      SourceArn:
+        Fn::GetAtt:
+        - KibanaUserPool
+        - Arn
+  KibanaUserPool:
+    Type: AWS::Cognito::UserPool
+    Properties:
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireNumbers: true
+          RequireSymbols: true
+          RequireUppercase: true
+      Schema:
+      - Name: email
+        AttributeDataType: String
+        DeveloperOnlyAttribute: false
+        Mutable: true
+        Required: true
+      LambdaConfig:
+        PreSignUp:
+          Fn::GetAtt:
+          - PreSignUp
+          - Arn
+  KibanaIdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Properties:
+      AllowUnauthenticatedIdentities: true
+  KibanaIdentityRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action: sts:AssumeRoleWithWebIdentity
+          Principal:
+            Federated: cognito-identity.amazonaws.com
+          Condition:
+            StringEquals:
+              cognito-identity.amazonaws.com:aud:
+                Ref: KibanaIdentityPool
+            ForAnyValue:StringLike:
+              cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+      - PolicyName: AuthenticatedPolicy
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+          - Effect: Allow
+            Action:
+            - es:ESHttp*
+            Resource:
+            - '*'
+  RoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId:
+        Ref: KibanaIdentityPool
+      Roles:
+        authenticated:
+          Fn::GetAtt:
+          - KibanaIdentityRole
+          - Arn
+  UserPoolDomain:
+    Type: Custom::UserPoolDomain
+    Version: 1.0
+    Properties:
+      ServiceToken:
+        Fn::GetAtt:
+        - ModifyUserPoolDomain
+        - Arn
+      Domain:
+        Ref: CognitoUserPoolDomain
+      UserPoolId:
+        Ref: KibanaUserPool
+  ModifyUserPoolDomain:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: '[CFn Custom Resource] modify a domain prefix for the sign-in page
+        hosted by Amazon Cognito'
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1mnves2xb5r4o/amazon-elasticsearch-cognito-auth/7715f0f4cc879ba8a8b81b8978ac540b
+      Handler: index.lambda_handler
+      Runtime: python3.6
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - cognito-idp:CreateUserPoolDomain
+          - cognito-idp:DeleteUserPoolDomain
+          Resource:
+          - Fn::GetAtt:
+            - KibanaUserPool
+            - Arn
+  ModifyTemplate:
+    Type: AWS::Serverless::Function
+    Properties:
+      Description: '[CFn Custom Resource] modify a mapping template of Amazon Elasticsearch
+        Service'
+      CodeUri: s3://aws-sam-cli-managed-default-samclisourcebucket-1mnves2xb5r4o/amazon-elasticsearch-cognito-auth/c5fa7e88a841592fcfb79bc50cf85be0
+      Handler: index.lambda_handler
+      Runtime: python3.6
+      Environment:
+        Variables:
+          ES_HOST:
+            Fn::GetAtt:
+            - Elasticsearch
+            - DomainEndpoint
+      Policies:
+      - Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action:
+          - es:ESHttpPut
+          - es:ESHttpDelete
+          Resource:
+          - Fn::Sub: ${Elasticsearch.Arn}/_template/*
+Outputs:
+  Arn:
+    Value:
+      Fn::GetAtt:
+      - Elasticsearch
+      - Arn
+  Endpoint:
+    Value:
+      Fn::GetAtt:
+      - Elasticsearch
+      - DomainEndpoint
+  ModifyTemplateArn:
+    Value:
+      Fn::GetAtt:
+      - ModifyTemplate
+      - Arn
