@@ -1,0 +1,1 @@
+# amazon-elasticsearch-cognito-auth
