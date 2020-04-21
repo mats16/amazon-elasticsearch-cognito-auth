@@ -12,7 +12,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.1.0
+    SemanticVersion: 0.1.1
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -38,10 +38,7 @@ Globals:
 Parameters:
   ElasticsearchVersion:
     Type: String
-    Default: 7.1
-    AllowedValues:
-      - 7.1
-      - 6.8
+    Default: 7.4
   ElasticsearchAvailabilityZoneCount:
     Type: Number
     Default: 2
