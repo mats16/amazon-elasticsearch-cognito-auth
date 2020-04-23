@@ -20,16 +20,19 @@ def lambda_handler(event, context):
 @helper.create
 def create(event, context):
     user_pool_id = event['ResourceProperties']['UserPoolId']
-    domain = event['ResourceProperties']['Domain']
+    domain = event['ResourceProperties'].get('Domain', user_pool_id.split('_')[1].lower())
     client.create_user_pool_domain(
         UserPoolId=user_pool_id,
         Domain=domain,
     )
+    region = user_pool_id.split('_')[0]
+    physical_resource_id = f'{domain}.auth.{region}.amazoncognito.com'
+    return physical_resource_id
 
 @helper.update
 def update(event, context):
     user_pool_id = event['ResourceProperties']['UserPoolId']
-    domain = event['ResourceProperties']['Domain']
+    domain = event['ResourceProperties'].get('Domain', user_pool_id.split('_')[1].lower())
     old_user_pool_id = event['OldResourceProperties']['UserPoolId']
     old_domain = event['OldResourceProperties']['Domain']
     client.delete_user_pool_domain(
@@ -40,12 +43,21 @@ def update(event, context):
         UserPoolId=user_pool_id,
         Domain=domain,
     )
+    region = user_pool_id.split('_')[0]
+    physical_resource_id = f'{domain}.auth.{region}.amazoncognito.com'
+    return physical_resource_id
 
 @helper.delete
 def delete(event, context):
     user_pool_id = event['ResourceProperties']['UserPoolId']
-    domain = event['ResourceProperties']['Domain']
-    client.delete_user_pool_domain(
-        UserPoolId=user_pool_id,
-        Domain=domain,
-    )
+    domain = event['ResourceProperties'].get('Domain', user_pool_id.split('_')[-1].lower())
+    try:
+        res = client.delete_user_pool_domain(
+            UserPoolId=user_pool_id,
+            Domain=domain,
+        )
+        logger.info(res)
+    except InvalidParameterException as e:
+        logger.info(e)
+    except Exception as e:
+        logger.error(e)

@@ -19,10 +19,9 @@ Resources:
     Properties:
       Location:
         ApplicationId: arn:aws:serverlessrepo:us-east-1:345513370492:applications/amazon-elasticsearch-cognito-auth
-        SemanticVersion: 0.1.0
+        SemanticVersion: 0.2.2
       Parameters:
         ElasticsearchVersion: 7.4
-        CognitoUserPoolDomain: your-domain-prefix
         CognitoAllowedEmailDomains: '*'
 
   TweetsTemplate:
@@ -30,11 +29,12 @@ Resources:
     Version: 1.0
     Properties:
       ServiceToken: !GetAtt Elasticsearch.Outputs.ModifyTemplateArn
+      Host: !GetAtt Elasticsearch.Outputs.Endpoint
       Body: '
         {
           "index_patterns": ["index-*"],
           "settings": {
-            "number_of_shards": 1,
+            "number_of_shards": 4,
             "number_of_replicas": 1
           },
           "mappings": {

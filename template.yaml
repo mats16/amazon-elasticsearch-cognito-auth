@@ -12,7 +12,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.1.1
+    SemanticVersion: 0.2.2
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -28,7 +28,6 @@ Metadata:
       - Label:
           default: Cognito Configuration
         Parameters:
-          - CognitoUserPoolDomain
           - CognitoAllowedEmailDomains
 
 Globals:
@@ -37,8 +36,10 @@ Globals:
 
 Parameters:
   ElasticsearchVersion:
+    Description: 7.x supported only
     Type: String
     Default: 7.4
+    AllowedPattern: ^7\.[0-9]+$
   ElasticsearchAvailabilityZoneCount:
     Type: Number
     Default: 2
@@ -47,43 +48,20 @@ Parameters:
       - 2
       - 3
   ElasticsearchInstanceType:
+    Description: i3 family supported only
     Type: String
     Default: i3.large.elasticsearch
-    AllowedValues:
-      - i3.large.elasticsearch
-      - i3.xlarge.elasticsearch
-      - i3.2xlarge.elasticsearch
-      - i3.4xlarge.elasticsearch
-      - i3.8xlarge.elasticsearch
-      - i3.16xlarge.elasticsearch
+    AllowedPattern: ^i3\.[a-z1-9]+\.elasticsearch$
   ElasticsearchInstanceCount:
     Type: Number
     Default: 2
   ElasticsearchMasterType:
     Type: String
     Default: t2.medium.elasticsearch
-    AllowedValues:
-      - t2.small.elasticsearch
-      - t2.medium.elasticsearch
-      - m5.large.elasticsearch
-      - m5.xlarge.elasticsearch
-      - m5.2xlarge.elasticsearch
-      - m5.4xlarge.elasticsearch
-      - m5.12xlarge.elasticsearch
-      - r5.large.elasticsearch
-      - r5.xlarge.elasticsearch
-      - r5.2xlarge.elasticsearch
-      - r5.4xlarge.elasticsearch
-      - r5.12xlarge.elasticsearch
+    AllowedPattern: ^[a-z1-9]+\.[a-z1-9]+\.elasticsearch$
   ElasticsearchMasterCount:
     Type: Number
     Default: 3
-  CognitoUserPoolDomain:
-    Description: Domain prefix for the sign-in page hosted by Amazon Cognito
-    Type: String
-    AllowedPattern: ^[a-z0-9\-]*$
-    MaxLength: 63
-    MinLength: 1
   CognitoAllowedEmailDomains:
     Type: CommaDelimitedList
     Description: Specific domains allowed to register on Cognito
@@ -238,7 +216,6 @@ Resources:
     Version: 1.0
     Properties:
       ServiceToken: !GetAtt ModifyUserPoolDomain.Arn
-      Domain: !Ref CognitoUserPoolDomain
       UserPoolId: !Ref KibanaUserPool
 
   ModifyUserPoolDomain:
@@ -276,7 +253,7 @@ Resources:
                 - es:ESHttpPut
                 - es:ESHttpDelete
               Resource:
-                - !Sub '${Elasticsearch.Arn}/_template/*'
+                - !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*/_template/*'
 
 Outputs:
 

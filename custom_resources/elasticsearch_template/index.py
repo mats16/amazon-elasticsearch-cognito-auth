@@ -9,8 +9,6 @@ from elasticsearch.client import IndicesClient
 from elasticsearch.exceptions import NotFoundError
 from requests_aws4auth import AWS4Auth
 
-es_host = os.environ.get('ES_HOST')
-
 logger = logging.getLogger(__name__)
 helper = CfnResource(json_logging=False, log_level='DEBUG', boto_level='CRITICAL')
 
@@ -29,26 +27,32 @@ def lambda_handler(event, context):
 @helper.create
 @helper.update
 def create(event, context):
-    resource_id = event['LogicalResourceId'].lower()
+    template_name = event['LogicalResourceId'].lower()
+    host = event['ResourceProperties']['Host']
+    port = int(event['ResourceProperties'].get('Port', 443))
     body = json.loads(event['ResourceProperties']['Body'])
     es = Elasticsearch(
-        hosts = [{'host': es_host, 'port': 443}],
+        hosts = [{'host': host, 'port': port}],
         http_auth = awsauth,
         use_ssl = True,
         verify_certs = True,
         connection_class = RequestsHttpConnection
     )
-    response = IndicesClient(es).put_template(
-        name=resource_id,
+    res = IndicesClient(es).put_template(
+        name=template_name,
         body=body,
     )
-    logger.info(response)
+    logger.info(res)
+    physical_resource_id = f'{host}/_template/{template_name}'
+    return physical_resource_id
 
 @helper.delete
 def delete(event, context):
-    resource_id = event['LogicalResourceId'].lower()
+    template_name = event['LogicalResourceId'].lower()
+    host = event['ResourceProperties']['Host']
+    port = int(event['ResourceProperties'].get('Port', 443))
     es = Elasticsearch(
-        hosts = [{'host': es_host, 'port': 443}],
+        hosts = [{'host': host, 'port': port}],
         http_auth = awsauth,
         use_ssl = True,
         verify_certs = True,
@@ -56,7 +60,7 @@ def delete(event, context):
     )
     try:
         res = IndicesClient(es).delete_template(
-            name=resource_id,
+            name=template_name,
         )
         logger.info(res)
     except NotFoundError as e:
