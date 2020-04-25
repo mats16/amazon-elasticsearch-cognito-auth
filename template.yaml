@@ -13,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.2.2
+    SemanticVersion: 0.3.0
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -67,6 +67,12 @@ Parameters:
     Type: CommaDelimitedList
     Description: Specific domains allowed to register on Cognito
     Default: amazon.com,amazon.co.jp
+  ReaderRoleEnabled:
+    Type: String
+    Default: false
+    AllowedValues:
+      - false
+      - true
 
 Conditions:
   EBSDisabled: !Or
@@ -76,6 +82,7 @@ Conditions:
     - !Equals [!Ref ElasticsearchInstanceType, 'i3.4xlarge.elasticsearch']
     - !Equals [!Ref ElasticsearchInstanceType, 'i3.8xlarge.elasticsearch']
     - !Equals [!Ref ElasticsearchInstanceType, 'i3.16xlarge.elasticsearch']
+  ReaderRoleEnabled: !Equals [!Ref ReaderRoleEnabled, 'true']
 
 Resources:
 
@@ -184,11 +191,8 @@ Resources:
     Type: AWS::Cognito::IdentityPool
     Properties:
       AllowUnauthenticatedIdentities: true
-      # CognitoIdentityProviders:
-      #   - ClientId: !Ref UserPoolClient
-      #     ProviderName: !Sub "cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
 
-  KibanaIdentityRole:
+  KibanaAuthorRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -204,22 +208,66 @@ Resources:
               ForAnyValue:StringLike:
                 "cognito-identity.amazonaws.com:amr": authenticated
       Policies:
-        - PolicyName: AuthenticatedPolicy
+        - PolicyName: AuthorPolicy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: "Allow"
                 Action:
-                  - "es:ESHttp*"
+                  - 'es:ESHttp*'
                 Resource:
-                  - "*"
+                  - !Sub '${Elasticsearch.Arn}/*'
+
+  KibanaReaderRole:
+    Type: AWS::IAM::Role
+    Condition: ReaderRoleEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref KibanaIdentityPool
+              ForAnyValue:StringLike:
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: ReaderPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - 'es:ESHttpHead'
+                  - 'es:ESHttpGet'
+                  - 'es:ESHttpPost'
+                Resource:
+                  - !Sub '${Elasticsearch.Arn}/*'
 
   RoleAttachment:
     Type: AWS::Cognito::IdentityPoolRoleAttachment
     Properties:
       IdentityPoolId: !Ref KibanaIdentityPool
       Roles:
-        authenticated: !GetAtt KibanaIdentityRole.Arn
+        authenticated: !If [ReaderRoleEnabled, !GetAtt KibanaReaderRole.Arn, !GetAtt KibanaAuthorRole.Arn]
+      #RoleMappings:
+      #  userpool1:
+      #    IdentityProvider: !Ref KibanaUserPool
+      #    AmbiguousRoleResolution: AuthenticatedRole
+      #    Type: Token
+
+  Authors:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: ReaderRoleEnabled
+    Properties: 
+      Description: Create and publish interactive dashboards
+      GroupName: Authors
+      Precedence: 0
+      RoleArn: !GetAtt KibanaAuthorRole.Arn
+      UserPoolId: !Ref KibanaUserPool
 
   UserPoolDomain:
     Type: Custom::UserPoolDomain
