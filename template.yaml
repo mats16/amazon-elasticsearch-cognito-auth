@@ -49,7 +49,6 @@ Parameters:
       - 2
       - 3
   ElasticsearchInstanceType:
-    Description: i3 family supported only
     Type: String
     Default: i3.large.elasticsearch
     AllowedPattern: ^[a-z1-9]+\.[a-z1-9]+\.elasticsearch$
