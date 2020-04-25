@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Transform: "AWS::Serverless-2016-10-31"
 Description: 'Amazon Elasticsearch Service with Amazon Cognito'
 
 Metadata:
@@ -51,7 +52,7 @@ Parameters:
     Description: i3 family supported only
     Type: String
     Default: i3.large.elasticsearch
-    AllowedPattern: ^i3\.[a-z1-9]+\.elasticsearch$
+    AllowedPattern: ^[a-z1-9]+\.[a-z1-9]+\.elasticsearch$
   ElasticsearchInstanceCount:
     Type: Number
     Default: 2
@@ -67,7 +68,15 @@ Parameters:
     Description: Specific domains allowed to register on Cognito
     Default: amazon.com,amazon.co.jp
 
-Transform: "AWS::Serverless-2016-10-31"
+Conditions:
+  EBSDisabled: !Or
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.large.elasticsearch']
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.xlarge.elasticsearch']
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.2xlarge.elasticsearch']
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.4xlarge.elasticsearch']
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.8xlarge.elasticsearch']
+    - !Equals [!Ref ElasticsearchInstanceType, 'i3.16xlarge.elasticsearch']
+
 Resources:
 
   Elasticsearch:
@@ -85,13 +94,14 @@ Resources:
         DedicatedMasterEnabled: true
         DedicatedMasterType: !Ref ElasticsearchMasterType
         DedicatedMasterCount: !Ref ElasticsearchMasterCount
+      EBSOptions:
+        EBSEnabled: !If [EBSDisabled, !Ref AWS::NoValue, true]
+        VolumeSize: !If [EBSDisabled, !Ref AWS::NoValue, 100]
       CognitoOptions:
         Enabled: true
         UserPoolId: !Ref KibanaUserPool
         IdentityPoolId: !Ref KibanaIdentityPool
         RoleArn: !GetAtt CognitoAccessForAmazonES.Arn
-      #DomainEndpointOptions:  # Not supported yet
-      #  EnforceHTTPS: true
       AdvancedOptions:
         rest.action.multi.allow_explicit_index: true
       AccessPolicies: !Sub |
