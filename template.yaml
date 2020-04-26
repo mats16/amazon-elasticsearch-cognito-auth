@@ -44,7 +44,7 @@ Parameters:
     AllowedPattern: ^7\.[0-9]+$
   ElasticsearchAvailabilityZoneCount:
     Type: Number
-    Default: 2
+    Default: 3
     AllowedValues:
       - 1
       - 2
