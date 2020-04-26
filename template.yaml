@@ -13,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.3.1
+    SemanticVersion: 0.3.3
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -44,7 +44,7 @@ Parameters:
     AllowedPattern: ^7\.[0-9]+$
   ElasticsearchAvailabilityZoneCount:
     Type: Number
-    Default: 3
+    Default: 2
     AllowedValues:
       - 1
       - 2
@@ -294,7 +294,7 @@ Resources:
               Action: 'iam:PassRole'
               Resource: '*'
 
-  Authors:
+  KibanaUserPoolGroupAuthors:
     Type: AWS::Cognito::UserPoolGroup
     Condition: KibanaReaderRoleEnabled
     Properties: 
