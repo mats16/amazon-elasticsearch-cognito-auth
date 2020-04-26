@@ -87,7 +87,7 @@ Resources:
 
   Elasticsearch:
     Type: AWS::Elasticsearch::Domain
-    DependsOn: UserPoolDomain
+    DependsOn: KibanaUserPoolDomain
     DeletionPolicy: Retain
     Properties:
       ElasticsearchVersion: !Ref ElasticsearchVersion
@@ -304,7 +304,7 @@ Resources:
       RoleArn: !GetAtt KibanaAuthorRole.Arn
       UserPoolId: !Ref KibanaUserPool
 
-  UserPoolDomain:
+  KibanaUserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain 
     Properties:
       UserPoolId: !Ref KibanaUserPool
