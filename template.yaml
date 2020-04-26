@@ -1,4 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
+Transform: "AWS::Serverless-2016-10-31"
 Description: 'Amazon Elasticsearch Service with Amazon Cognito'
 
 Metadata:
@@ -12,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.2.2
+    SemanticVersion: 0.3.3
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -26,9 +27,10 @@ Metadata:
           - ElasticsearchMasterType
           - ElasticsearchMasterCount
       - Label:
-          default: Cognito Configuration
+          default: Kibana Configuration
         Parameters:
-          - CognitoAllowedEmailDomains
+          - KibanaSignupAllowedEmailDomains
+          - KibanaReaderRoleEnabled
 
 Globals:
   Function:
@@ -48,10 +50,9 @@ Parameters:
       - 2
       - 3
   ElasticsearchInstanceType:
-    Description: i3 family supported only
     Type: String
     Default: i3.large.elasticsearch
-    AllowedPattern: ^i3\.[a-z1-9]+\.elasticsearch$
+    AllowedPattern: ^[a-z1-9]+\.[a-z1-9]+\.elasticsearch$
   ElasticsearchInstanceCount:
     Type: Number
     Default: 2
@@ -62,17 +63,31 @@ Parameters:
   ElasticsearchMasterCount:
     Type: Number
     Default: 3
-  CognitoAllowedEmailDomains:
+    AllowedValues:
+      - 0
+      - 3
+      - 5
+  KibanaSignupAllowedEmailDomains:
     Type: CommaDelimitedList
-    Description: Specific domains allowed to register on Cognito
+    Description: Specific domains allowed to register on Kibana
     Default: amazon.com,amazon.co.jp
+  KibanaReaderRoleEnabled:
+    Type: String
+    Default: false
+    AllowedValues:
+      - false
+      - true
 
-Transform: "AWS::Serverless-2016-10-31"
+Conditions:
+  EBSEnabled: !Not [ !Equals [ !Select [ 0, !Split [ '.', !Ref ElasticsearchInstanceType ] ], 'i3' ] ]
+  DedicatedMasterEnabled: !Not [ !Equals [ !Ref ElasticsearchMasterCount, 0 ] ]
+  KibanaReaderRoleEnabled: !Equals [ !Ref KibanaReaderRoleEnabled, 'true' ]
+
 Resources:
 
   Elasticsearch:
     Type: AWS::Elasticsearch::Domain
-    DependsOn: UserPoolDomain
+    DependsOn: KibanaUserPoolDomain
     DeletionPolicy: Retain
     Properties:
       ElasticsearchVersion: !Ref ElasticsearchVersion
@@ -82,16 +97,17 @@ Resources:
            AvailabilityZoneCount: !Ref ElasticsearchAvailabilityZoneCount
         InstanceType: !Ref ElasticsearchInstanceType
         InstanceCount: !Ref ElasticsearchInstanceCount
-        DedicatedMasterEnabled: true
-        DedicatedMasterType: !Ref ElasticsearchMasterType
-        DedicatedMasterCount: !Ref ElasticsearchMasterCount
+        DedicatedMasterEnabled: !If [ DedicatedMasterEnabled, true, false ]
+        DedicatedMasterType: !If [ DedicatedMasterEnabled, !Ref ElasticsearchMasterType, !Ref AWS::NoValue ]
+        DedicatedMasterCount: !If [ DedicatedMasterEnabled, !Ref ElasticsearchMasterCount, !Ref AWS::NoValue ]
+      EBSOptions:
+        EBSEnabled: !If [ EBSEnabled, true, !Ref AWS::NoValue ]
+        VolumeSize: !If [ EBSEnabled, 100, !Ref AWS::NoValue ]
       CognitoOptions:
         Enabled: true
         UserPoolId: !Ref KibanaUserPool
         IdentityPoolId: !Ref KibanaIdentityPool
         RoleArn: !GetAtt CognitoAccessForAmazonES.Arn
-      #DomainEndpointOptions:  # Not supported yet
-      #  EnforceHTTPS: true
       AdvancedOptions:
         rest.action.multi.allow_explicit_index: true
       AccessPolicies: !Sub |
@@ -137,7 +153,7 @@ Resources:
       Runtime: python3.6
       Environment:
         Variables:
-          ALLOWED_DOMAINS: !Join [',', !Ref CognitoAllowedEmailDomains] 
+          ALLOWED_DOMAINS: !Join [',', !Ref KibanaSignupAllowedEmailDomains] 
 
   PreSignUpInvocationPermission:
     Type: AWS::Lambda::Permission
@@ -174,11 +190,8 @@ Resources:
     Type: AWS::Cognito::IdentityPool
     Properties:
       AllowUnauthenticatedIdentities: true
-      # CognitoIdentityProviders:
-      #   - ClientId: !Ref UserPoolClient
-      #     ProviderName: !Sub "cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}"
 
-  KibanaIdentityRole:
+  KibanaAuthorRole:
     Type: AWS::IAM::Role
     Properties:
       AssumeRolePolicyDocument:
@@ -194,46 +207,108 @@ Resources:
               ForAnyValue:StringLike:
                 "cognito-identity.amazonaws.com:amr": authenticated
       Policies:
-        - PolicyName: AuthenticatedPolicy
+        - PolicyName: AuthorPolicy
           PolicyDocument:
             Version: "2012-10-17"
             Statement:
               - Effect: "Allow"
                 Action:
-                  - "es:ESHttp*"
+                  - 'es:ESHttp*'
                 Resource:
-                  - "*"
+                  - !Sub '${Elasticsearch.Arn}/*'
+
+  KibanaReaderRole:
+    Type: AWS::IAM::Role
+    Condition: KibanaReaderRoleEnabled
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRoleWithWebIdentity"
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Condition:
+              StringEquals:
+                "cognito-identity.amazonaws.com:aud": !Ref KibanaIdentityPool
+              ForAnyValue:StringLike:
+                "cognito-identity.amazonaws.com:amr": authenticated
+      Policies:
+        - PolicyName: ReaderPolicy
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - 'es:ESHttpHead'
+                  - 'es:ESHttpGet'
+                  - 'es:ESHttpPost'
+                Resource:
+                  - !Sub '${Elasticsearch.Arn}/*'
 
   RoleAttachment:
     Type: AWS::Cognito::IdentityPoolRoleAttachment
     Properties:
       IdentityPoolId: !Ref KibanaIdentityPool
       Roles:
-        authenticated: !GetAtt KibanaIdentityRole.Arn
+        authenticated: !If [KibanaReaderRoleEnabled, !GetAtt KibanaReaderRole.Arn, !GetAtt KibanaAuthorRole.Arn]
+      # Todo: Get ClientId with Macro instead of lambda custom resource
+      #RoleMappings: !If
+      #  - KibanaReaderRoleEnabled
+      #  - userpool1:
+      #      IdentityProvider: !Sub '${KibanaUserPool.ProviderName}:${ClientId}'
+      #      Type: Token
+      #      AmbiguousRoleResolution: AuthenticatedRole
+      #  - !Ref AWS::NoValue
 
-  UserPoolDomain:
-    Type: Custom::UserPoolDomain
+  EnableProviderToken:
+    Type: Custom::IdentityPoolEnableProviderToken
+    Condition: KibanaReaderRoleEnabled
+    DependsOn:
+      - Elasticsearch
+      - RoleAttachment
     Version: 1.0
     Properties:
-      ServiceToken: !GetAtt ModifyUserPoolDomain.Arn
+      ServiceToken: !GetAtt EnableProviderTokenFunction.Arn
+      IdentityPoolId: !Ref KibanaIdentityPool
       UserPoolId: !Ref KibanaUserPool
 
-  ModifyUserPoolDomain:
+  EnableProviderTokenFunction:
     Type: AWS::Serverless::Function
+    Condition: KibanaReaderRoleEnabled
     Properties:
-      Description: '[CFn Custom Resource] modify a domain prefix for the sign-in page hosted by Amazon Cognito'
-      CodeUri: custom_resources/userpool_domain/
+      Description: '[CFn Custom Resource] Make Cogito IdentityPool to use the token from Cognito UserPool'
+      CodeUri: custom_resources/enable_provider_token/
       Handler: index.lambda_handler
       Runtime: python3.6
       Policies:
         - Version: "2012-10-17"
           Statement:
-            - Effect: "Allow"
+            - Effect: Allow
               Action:
-                - "cognito-idp:CreateUserPoolDomain"
-                - "cognito-idp:DeleteUserPoolDomain"
-              Resource:
-                - !GetAtt KibanaUserPool.Arn
+                - 'cognito-identity:DescribeIdentityPool'
+                - 'cognito-identity:GetIdentityPoolRoles'
+                - 'cognito-identity:SetIdentityPoolRoles'
+              Resource: !Sub 'arn:aws:cognito-identity:${AWS::Region}:${AWS::AccountId}:identitypool/${KibanaIdentityPool}'
+            - Effect: Allow
+              Action: 'iam:PassRole'
+              Resource: '*'
+
+  KibanaUserPoolGroupAuthors:
+    Type: AWS::Cognito::UserPoolGroup
+    Condition: KibanaReaderRoleEnabled
+    Properties: 
+      Description: Create and publish interactive dashboards
+      GroupName: Authors
+      Precedence: 0
+      RoleArn: !GetAtt KibanaAuthorRole.Arn
+      UserPoolId: !Ref KibanaUserPool
+
+  KibanaUserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain 
+    Properties:
+      UserPoolId: !Ref KibanaUserPool
+      Domain: !Select [ 2, !Split [ '/', !Ref AWS::StackId ] ]
 
   ModifyTemplate:
     Type: AWS::Serverless::Function

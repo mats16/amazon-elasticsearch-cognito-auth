@@ -1,6 +1,12 @@
 # Amazon Elasticsearch Service with Amazon Cognito Auth
 
-## How to Buid & Deploy
+## Get Started
+
+Deploy the sample template from the AWS Serverless Application Repository:
+
+[![cloudformation-launch-button](https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png)](https://serverlessrepo.aws.amazon.com/applications/arn:aws:serverlessrepo:us-east-1:345513370492:applications~amazon-elasticsearch-cognito-auth)
+
+## How to Buid & Deploy with AWS SAM
 
 ```bash
 sam build --use-container --skip-pull-image
@@ -19,7 +25,7 @@ Resources:
     Properties:
       Location:
         ApplicationId: arn:aws:serverlessrepo:us-east-1:345513370492:applications/amazon-elasticsearch-cognito-auth
-        SemanticVersion: 0.2.2
+        SemanticVersion: 0.3.3
       Parameters:
         ElasticsearchVersion: 7.4
         CognitoAllowedEmailDomains: '*'
