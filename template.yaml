@@ -13,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.3.0
+    SemanticVersion: 0.3.1
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -87,7 +87,7 @@ Resources:
 
   Elasticsearch:
     Type: AWS::Elasticsearch::Domain
-    #DependsOn: UserPoolDomain
+    DependsOn: UserPoolDomain
     DeletionPolicy: Retain
     Properties:
       ElasticsearchVersion: !Ref ElasticsearchVersion
@@ -304,11 +304,11 @@ Resources:
       RoleArn: !GetAtt KibanaAuthorRole.Arn
       UserPoolId: !Ref KibanaUserPool
 
-  #UserPoolDomain:
-  #  Type: AWS::Cognito::UserPoolDomain 
-  #  Properties:
-  #    UserPoolId: !Ref KibanaUserPool
-  #    Domain: !Select [ 2, !Split [ '/', !Ref AWS::StackId ] ]
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain 
+    Properties:
+      UserPoolId: !Ref KibanaUserPool
+      Domain: !Select [ 2, !Split [ '/', !Ref AWS::StackId ] ]
 
   ModifyTemplate:
     Type: AWS::Serverless::Function
