@@ -13,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.4.0
+    SemanticVersion: 0.4.1
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:

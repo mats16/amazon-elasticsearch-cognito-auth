@@ -25,9 +25,9 @@ Resources:
     Properties:
       Location:
         ApplicationId: arn:aws:serverlessrepo:us-east-1:345513370492:applications/amazon-elasticsearch-cognito-auth
-        SemanticVersion: 0.3.3
+        SemanticVersion: 0.4.1
       Parameters:
-        ElasticsearchVersion: 7.4
+        ElasticsearchVersion: 7.7
         CognitoAllowedEmailDomains: '*'
 
   TweetsTemplate:
@@ -54,4 +54,17 @@ Resources:
             }
           }
         }'
+```
+
+## How to publish to AWS Serverless Application Repository
+
+```
+sam build
+
+sam package --template-file .aws-sam/build/template.yaml \
+  --output-template-file .aws-sam/build/packaged.yaml \
+  --s3-bucket aws-sam-cli-managed-default-samclisourcebucket-xxxxxxxxxxxxx \
+  --s3-prefix amazon-elasticsearch-cognito-auth
+
+sam publish --template .aws-sam/build/packaged.yaml --region us-east-1
 ```
