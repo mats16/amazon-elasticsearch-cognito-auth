@@ -25,7 +25,7 @@ Resources:
     Properties:
       Location:
         ApplicationId: arn:aws:serverlessrepo:us-east-1:345513370492:applications/amazon-elasticsearch-cognito-auth
-        SemanticVersion: 0.4.1
+        SemanticVersion: 0.4.2
       Parameters:
         ElasticsearchVersion: 7.7
         CognitoAllowedEmailDomains: '*'

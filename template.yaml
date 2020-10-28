@@ -13,7 +13,7 @@ Metadata:
     ReadmeUrl: README.md
     Labels: ['elasticsearch', 'cognito']
     HomepageUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
-    SemanticVersion: 0.4.1
+    SemanticVersion: 0.4.2
     SourceCodeUrl: https://github.com/mats16/amazon-elasticsearch-cognito-auth/tree/master/cognito
   AWS::CloudFormation::Interface:
     ParameterGroups:
@@ -234,7 +234,7 @@ Resources:
               - !Sub '${Elasticsearch.Arn}/*'
       Roles: 
         - !Ref KibanaUserRole
-        - !If [ FineGrainedAccessControlEnabled, !Ref KibanaMasterRole, !Ref AWS::NoValue ]
+        - !Ref KibanaMasterRole
 
   KibanaUserRole:
     Type: AWS::IAM::Role
@@ -254,11 +254,14 @@ Resources:
 
   KibanaMasterRole:
     Type: AWS::IAM::Role
-    Condition: FineGrainedAccessControlEnabled
     Properties:
       AssumeRolePolicyDocument:
         Version: "2012-10-17"
         Statement:
+          - Effect: Allow
+            Action: "sts:AssumeRole"
+            Principal:
+              Service: lambda.amazonaws.com
           - Effect: Allow
             Action: "sts:AssumeRoleWithWebIdentity"
             Principal:
@@ -327,15 +330,7 @@ Resources:
       CodeUri: custom_resources/elasticsearch_template/
       Handler: index.lambda_handler
       Runtime: python3.8
-      Policies:
-        - Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Action:
-                - es:ESHttpPut
-                - es:ESHttpDelete
-              Resource:
-                - !Sub 'arn:aws:es:${AWS::Region}:${AWS::AccountId}:domain/*/_template/*'
+      Role: !GetAtt KibanaMasterRole.Arn
 
 Outputs:
 
